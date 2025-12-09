@@ -26,6 +26,7 @@ prompt = FewShotPromptTemplate(
 )
 
 formatted_prompt = prompt.format(input="young")
+# print(formatted_prompt)
 response = llm.invoke(formatted_prompt)
 
 print(response.content) # Вывод: old
