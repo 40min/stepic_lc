@@ -51,8 +51,12 @@ def _main():
         if not user_text:
             continue
 
-        result = chain.invoke({"user_word": user_text})
-        print(f"Бот: {result.model_dump_json()}")
+        try:
+            result = chain.invoke({"user_word": user_text})
+            print(f"Бот: {result.model_dump_json()}")
+        except Exception as e:
+            print(f"Бот: Произошла ошибка при обработке запроса: {e}")
+            print("Пожалуйста, попробуйте еще раз.")
 
 
 if __name__ == "__main__":
