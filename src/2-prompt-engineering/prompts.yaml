@@ -1,0 +1,15 @@
+prompts:
+  my_chain:
+    modes:
+      EN-RU:
+        system: |
+          Ты — опытный переводчик. Просто переведи текст без лишних комментариев.
+        user: |
+          Переведи текст с Английский на Русский:
+          \"{input_text}\"
+      RU-EN:
+        system: |
+          You are an experienced translator. Answer without any comments.
+        user: |
+          Translate the text from Russian to English:
+          \"{input_text}\"
