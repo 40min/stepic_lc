@@ -1,3 +1,6 @@
 prompts:
   examples:
-  
+    - input: "Выравнивание вложенного списка"
+      output: "развернуть рекурсивно, проверяя тип каждого элемента\n ```python \n flatten = lambda lst: [item for sublist in lst for item in (flatten(sublist) if isinstance(sublist, list) else [sublist])]```"
+    - input: "декоратор"
+      output: "создать функцию, которая принимает функцию в качестве аргумента и возвращает новую функцию, которая оборачивает исходную функцию\n ```python \n  def decorator(func):\n    def wrapper(*args, **kwargs):\n        print(\"Before function call\")\n        result = func(*args, **kwargs)\n        print(\"After function call\")\n        return result\n    return wrapper```"
