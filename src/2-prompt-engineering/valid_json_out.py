@@ -36,7 +36,7 @@ def _get_chain():
         partial_variables={"format_instructions": format_instructions},
     )
 
-    chain = prompt | llm | output_parser
+    chain = prompt | llm | output_parser 
 
     return chain
 

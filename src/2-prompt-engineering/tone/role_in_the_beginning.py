@@ -3,32 +3,41 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
+import tiktoken
 
 load_dotenv()
-model_name = "x-ai/grok-code-fast-1"
-api_key = os.getenv("OPENROUTER_API_KEY")
-llm = ChatOpenAI(
-    model=model_name,
-    base_url="https://openrouter.ai/api/v1",
-    api_key=api_key,
-    temperature=0
-)
+MODEL = os.getenv("OPENAI_API_MODEL", "gpt-5")
 
-# 🔑 Кастомная память с автоматическим добавлением системного промпта
+llm = ChatOpenAI(model_name=MODEL, temperature=0.9)
+
+# Кастомная память с автоматическим добавлением системного промпта
 class MemoryWithSystemPrepend(BaseChatMessageHistory):
-    def __init__(self, system_prompt: str):
+    def __init__(self, system_prompt: str, max_tokens: int = 4000):
         self.system_prompt = system_prompt
         self._messages = []  # Храним только диалог (без system)
+        self.max_tokens = max_tokens
+        self.encoder = tiktoken.get_encoding("cl100k_base")
+
+    def count_tokens(self, messages):
+            total = 0
+            for msg in messages:
+                total += len(self.encoder.encode(msg.content))
+            return total
     
     @property
     def messages(self):
-        """При запросе истории добавляем system в начало"""
-        return [SystemMessage(content=self.system_prompt)] + self._messages
-    
+        """Подготовка истории: prepend system + усечение до max_tokens"""
+        history = [SystemMessage(content=self.system_prompt)] + self._messages
+        
+        while self.count_tokens(history) > self.max_tokens and len(history) > 1:
+            history.pop(1)
+
+        return history
+
     def add_message(self, message: BaseMessage):
         if not isinstance(message, SystemMessage):
             self._messages.append(message) # добавляем сообщения только в диалог
-    
+
     def clear(self):
         self._messages = []
 
@@ -59,5 +68,5 @@ print("\n📊 Что видит модель (первые 6 сообщений 
 for msg in support_memory.messages[:6]:
     print(f"  - {msg.__class__.__name__}: {msg.content[:50]}...")
     
-print(f"\n💾 Реально хранится: {len(support_memory._messages)} сообщений")
-print(f"📤 Отправляется в модель: {len(support_memory.messages)} сообщений (+ system)")
+print(f"\n💾 Реально хранится сообщений: {len(support_memory._messages)}")
+print(f"📤 Отправляется в модель сообщений (+ system): {len(support_memory.messages)}")
