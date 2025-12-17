@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import TokenTextSplitter
+from langchain_text_splitters import TokenTextSplitter, RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -17,6 +17,9 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2} [APM]{2}', '', text)
     text = re.sub(r'(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}', '', text)
     
+    # Remove specific PDF header text
+    text = text.replace("Виды и сорта китайского чая: полный гид по классификации, вкусам и свойствам", "")
+
     # Remove specific UI elements and footers
     text = re.sub(r'Наверх|Онлайн-запись|Онлайн-\nзапись|Чайные записи|Полезные статьи|Новости', '', text, flags=re.IGNORECASE)
     text = re.sub(r'https?://\S+', '', text) # Remove URLs
@@ -62,7 +65,7 @@ def load_pdf():
     print("Загружаем PDF ...")
     # Загрузка PDF
     loader = PyMuPDFLoader(
-        file_path="src/3-rag/vector_store_task/data/tea_guide.pdf",
+        file_path="data/tea_guide.pdf",
         # mode="page",  # "page" или "single"
         extract_images=False    
     )
@@ -86,7 +89,8 @@ def create_db():
     all_docs = html_docs + pdf_docs
     print(f"Всего документов: {len(all_docs)}")
 
-    text_splitter = TokenTextSplitter(encoding_name="cl100k_base", chunk_size=200, chunk_overlap=20)
+    # text_splitter = TokenTextSplitter(encoding_name="cl100k_base", chunk_size=250, chunk_overlap=50)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
     splitted_docs = text_splitter.split_documents(all_docs)
 
     print(f"Было документов: {len(all_docs)}, стало фрагментов: {len(splitted_docs)}")
@@ -104,10 +108,12 @@ def load_db() -> FAISS:
     vector_store = FAISS.load_local("data/tea_index", embed_model, allow_dangerous_deserialization=True)
     return vector_store
 
-def db_lookup(vector_store: FAISS, query: str, max_to_output: int = 100):
+def db_lookup(vector_store: FAISS, query: str, max_to_output: int = 500):
     docs_found = vector_store.similarity_search(query, k=2)
     for doc in docs_found:
-        print(doc.metadata, doc.page_content[:max_to_output])
+        # print(f"Metadata: {doc.metadata}")
+        print(f"Content: {doc.page_content[:max_to_output]}")
+        print("="*100)
 
 def main():
     if not Path("data/tea_index").exists():

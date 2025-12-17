@@ -16,6 +16,8 @@ html_loader = WebBaseLoader(
 html_docs = html_loader.load()
 print(f"Загружено {len(html_docs)} документов из HTML")
 
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
+# text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)
 
 text_splitter = TokenTextSplitter(encoding_name="cl100k_base", chunk_size=200, chunk_overlap=20)
 splitted_docs = text_splitter.split_documents(html_docs)
