@@ -9,4 +9,13 @@ wheels/
 # Virtual environments
 .venv
 
+# local setup
 .env
+
+# macos special
+.DS_Store
+
+# vector store
+index.faiss
+index.pkl
+

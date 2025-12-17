@@ -25,7 +25,7 @@ def load_pdf():
     print("Загружаем PDF ...")
     # Загрузка PDF
     loader = PyMuPDFLoader(
-        file_path="data/tea_guide.pdf",
+        file_path="src/3-rag/vector_store_task/data/tea_guide.pdf",
         # mode="page",  # "page" или "single"
         extract_images=False    
     )
@@ -62,7 +62,7 @@ def create_db():
 
 def load_db() -> FAISS:
     embed_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vector_store = FAISS.load_local("data/tea_index", embed_model)
+    vector_store = FAISS.load_local("data/tea_index", embed_model, allow_dangerous_deserialization=True)
     return vector_store
 
 def db_lookup(vector_store: FAISS, query: str, max_to_output: int = 100):
