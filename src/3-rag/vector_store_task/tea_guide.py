@@ -7,7 +7,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyMuPDFLoader
-from langchain.retrievers import BM25Retriever, EnsembleRetriever
+from langchain_classic.retrievers import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 
 import bs4
 
@@ -264,7 +265,7 @@ def compare_modes(vector_store: FAISS, bm25_retriever: BM25Retriever, query: str
     print(f"{'#'*100}")
     
     for mode in ['bm25', 'semantic', 'hybrid']:
-        db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=300)
+        db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=700)
         if mode != 'hybrid':
             input("Нажмите Enter для следующего режима...")
 
@@ -283,7 +284,7 @@ def test_queries(vector_store: FAISS, bm25_retriever: BM25Retriever):
     
     for query, mode in test_cases:
         print(f"\n🧪 Тест: {query} (режим: {mode})")
-        db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=400)
+        db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=700)
         input("Нажмите Enter для следующего запроса...")
 
 def main():
