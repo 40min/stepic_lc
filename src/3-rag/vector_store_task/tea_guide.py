@@ -12,8 +12,8 @@ from langchain_community.retrievers import BM25Retriever
 
 import bs4
 
-# EMBED_MODEL = "cointegrated/rubert-tiny2"
-EMBED_MODEL = "intfloat/multilingual-e5-small"
+EMBED_MODEL = "cointegrated/rubert-tiny2"
+# EMBED_MODEL = "intfloat/multilingual-e5-small"
 
 
 def clean_text(text: str) -> str:
@@ -197,10 +197,10 @@ def db_lookup(vector_store: FAISS, bm25_retriever: BM25Retriever,
     Args:
         mode: 'hybrid' (default), 'semantic', 'bm25'
     """
-    print(f"\n{'='*100}")
-    print(f"Запрос: {query}")
-    print(f"Режим: {mode.upper()}")
-    print(f"{'='*100}\n")
+    print(f"\n{'='*50} 🔍 ПОИСК {'='*50}")
+    print(f"📝 Запрос: {query}")
+    print(f"🎯 Режим: {mode.upper()}")
+    print(f"{'='*70}\n")
     
     if mode == 'hybrid':
         # Hybrid: 60% BM25 + 40% semantic (favor keywords for tea names)
@@ -227,42 +227,46 @@ def db_lookup(vector_store: FAISS, bm25_retriever: BM25Retriever,
         doc = doc_tuple[0]
         score = doc_tuple[1] if len(doc_tuple) > 1 and doc_tuple[1] is not None else None
         
-        print(f"Результат {i}", end="")
+        # Add ranking emojis
+        rank_emoji = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"#{i}")
+        print(f"{rank_emoji} Результат {i}", end="")
         if score is not None:
             print(f" (релевантность: {score:.4f})", end="")
         print()
         
-        print(f"Источник: {doc.metadata.get('source_type', 'unknown')} | "
-              f"Тема: {doc.metadata.get('topic', 'unknown')}")
+        source_type = doc.metadata.get('source_type', 'unknown')
+        topic = doc.metadata.get('topic', 'unknown')
+        source_emoji = {"web": "🌐", "pdf": "📄"}.get(source_type, "❓")
+        topic_emoji = {"brewing_guide": "☕", "tea_types": "🍵"}.get(topic, "📋")
+        print(f"{source_emoji} Источник: {doc.metadata.get('source_type', 'unknown')} | "
+              f"{topic_emoji} Тема: {doc.metadata.get('topic', 'unknown')}")
         if 'page' in doc.metadata:
-            print(f"Страница: {doc.metadata['page']}")
+            print(f"📄 Страница: {doc.metadata['page']}")
         
         # Highlight query terms for BM25/hybrid
         content = doc.page_content[:max_to_output]
-        if mode in ['bm25', 'hybrid']:
-            # Simple highlighting
-            query_terms = query.lower().split()
-            for term in query_terms:
-                if len(term) > 2:  # Skip short words
-                    # Highlight with >>> <<<
-                    content = re.sub(
-                        f'({re.escape(term)})', 
-                        r'>>>\1<<<', 
-                        content, 
-                        flags=re.IGNORECASE
-                    )
         
-        print(f"\nТекст ({len(doc.page_content)} символов):")
+        query_terms = query.lower().split()
+        for term in query_terms:
+            if len(term) > 2:  # Skip short words                    
+                content = re.sub(
+                    f'({re.escape(term)})',
+                    r'🔥\1🔥',
+                    content,
+                    flags=re.IGNORECASE
+                )
+        
+        print(f"\n📖 Текст ({len(doc.page_content)} символов):")
         print(content)
         if len(doc.page_content) > max_to_output:
-            print(f"... [обрезано, показано {max_to_output} из {len(doc.page_content)} символов]")
-        print(f"\n{'-'*100}\n")
+            print(f"✂️ ... [показано {max_to_output} из {len(doc.page_content)} символов]")
+        print(f"\n{'-'*50} 🌟 {'-'*50}\n")
 
 def compare_modes(vector_store: FAISS, bm25_retriever: BM25Retriever, query: str):
     """Compare all three search modes"""
-    print(f"\n{'#'*100}")
-    print(f"СРАВНЕНИЕ РЕЖИМОВ для: '{query}'")
-    print(f"{'#'*100}")
+    print(f"\n{'#'*40} 🔄 СРАВНЕНИЕ РЕЖИМОВ {'#'*40}")
+    print(f"📊 Для запроса: '{query}'")
+    print(f"{'#'*70}")
     
     for mode in ['bm25', 'semantic', 'hybrid']:
         db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=700)
@@ -278,12 +282,12 @@ def test_queries(vector_store: FAISS, bm25_retriever: BM25Retriever):
         ("температура воды для зеленого чая", "semantic"),
     ]
     
-    print("\n" + "="*100)
-    print("ТЕСТИРОВАНИЕ КАЧЕСТВА ПОИСКА")
-    print("="*100)
+    print("\n" + "="*45 + " 🧪 ТЕСТИРОВАНИЕ " + "="*45)
+    print("🎯 КАЧЕСТВА ПОИСКА")
+    print("="*70)
     
     for query, mode in test_cases:
-        print(f"\n🧪 Тест: {query} (режим: {mode})")
+        print(f"\n🧪 Тест: '{query}' (режим: {mode.upper()})")
         db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=700)
         input("Нажмите Enter для следующего запроса...")
 
@@ -293,29 +297,29 @@ def main():
     bm25_exists = Path("data/bm25_index.pkl").exists()
     
     if not (faiss_exists and bm25_exists):
-        print("⚠️  Индексы отсутствуют, создаём...")
+        print("⚠️  Индексы отсутствуют, создаём базу данных...")
         vector_store, bm25_retriever = create_db()
         
         # Run tests after creation
-        print("\n" + "="*100)
+        print("\n" + "="*70)
         response = input("Хотите протестировать базу? (y/n): ").strip().lower()
         if response == 'y':
             test_queries(vector_store, bm25_retriever)
     else:
-        print("✅ Индексы найдены, загружаем")
+        print("✅ Индексы найдены, загружаем базу данных")
         vector_store, bm25_retriever = load_db()
 
     # Interactive mode
-    print("\n" + "="*100)
-    print("ГИБРИДНЫЙ ПОИСК - РЕЖИМЫ:")
-    print("  'hybrid:запрос'   - BM25 + семантика (для названий чая)")
-    print("  'bm25:запрос'     - только keyword search")
-    print("  'semantic:запрос' - только семантический поиск")
-    print("  'compare:запрос'  - сравнить все режимы")
-    print("  'запрос'          - hybrid по умолчанию")
-    print("="*100)
-    print("ИНТЕРАКТИВНЫЙ РЕЖИМ (Ctrl+C для выхода)")
-    print("="*100)
+    print("\n" + "="*45 + " 🍵 ГИБРИДНЫЙ ПОИСК " + "="*45)
+    print("🎮 ДОСТУПНЫЕ РЕЖИМЫ:")
+    print("  🔄 'hybrid:запрос'   - BM25 + семантика (для названий чая)")
+    print("  🔍 'bm25:запрос'     - только keyword search")
+    print("  🧠 'semantic:запрос' - только семантический поиск")
+    print("  📊 'compare:запрос'  - сравнить все режимы")
+    print("  ⚡ 'запрос'          - semantic по умолчанию")
+    print("="*70)
+    print("💬 ИНТЕРАКТИВНЫЙ РЕЖИМ (Ctrl+C для выхода)")
+    print("="*70)
     
     while True:
         try:
@@ -334,10 +338,10 @@ def main():
                 mode = parts[0].strip()
                 query = parts[1].strip()
             else:
-                mode = 'hybrid'
+                mode = 'semantic'
                 query = user_input
         else:
-            mode = 'hybrid'
+            mode = 'semantic'
             query = user_input
         
         if mode == 'compare':
