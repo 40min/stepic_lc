@@ -242,6 +242,7 @@ def db_lookup(vector_store: FAISS, bm25_retriever: BM25Retriever,
               f"{topic_emoji} Тема: {doc.metadata.get('topic', 'unknown')}")
         if 'page' in doc.metadata:
             print(f"📄 Страница: {doc.metadata['page']}")
+        print(f"📋 Полные метаданные: {doc.metadata}")
         
         # Highlight query terms for BM25/hybrid
         content = doc.page_content[:max_to_output]

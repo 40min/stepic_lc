@@ -8,7 +8,7 @@
 .DEFAULT_GOAL := help
 
 # Project directories
-TEA_DIR := src/3-rag/vector_store_task
+TEA_DIR := src/3-rag/rag_faiss_demo
 DATA_DIR := $(TEA_DIR)/data
 TEA_INDEX_DIR := $(DATA_DIR)/tea_index
 
