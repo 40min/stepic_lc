@@ -2,99 +2,25 @@ from pathlib import Path
 import re
 import pickle
 
-from langchain_community.document_loaders import WebBaseLoader
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
 
-import bs4
+from loaders import load_web_page, load_pdf
+from preprosess import (
+    clean_text, 
+    dedupe_by_embedding, 
+    filter_and_dedup, 
+)
 
-EMBED_MODEL = "cointegrated/rubert-tiny2"
+
+
+EMBED_MODEL_NAME = "cointegrated/rubert-tiny2"
 # EMBED_MODEL = "intfloat/multilingual-e5-small"
 
-
-def clean_text(text: str) -> str:
-    """
-    Gentle cleaning that preserves structure and context.
-    Only removes obvious artifacts while keeping section headers and flow.
-    """
-    # Remove dates and times
-    text = re.sub(r'\d{1,2}/\d{1,2}/\d{2,4}, \d{1,2}:\d{2} [APM]{2}', '', text)
-    text = re.sub(r'(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}', '', text)
-    
-    # Remove specific PDF header text (only this exact phrase)
-    text = text.replace("Виды и сорта китайского чая: полный гид по классификации, вкусам и свойствам", "")
-    
-    # Remove navigation elements (but keep section titles)
-    text = re.sub(r'\b(Наверх|Онлайн-запись|Онлайн-\s*запись)\b', '', text, flags=re.IGNORECASE)
-    
-    # Remove URLs
-    text = re.sub(r'https?://\S+', '', text)
-    
-    # Remove page numbers like "1/44" but not regular fractions
-    text = re.sub(r'\b\d+/\d+\b(?=\s|$)', '', text)
-    
-    # Clean whitespace characters
-    text = text.replace('\xa0', ' ')
-    text = text.replace('\r', '\n')
-    text = text.replace('\t', ' ')
-    
-    # Normalize newlines: max 2 consecutive newlines
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    
-    # Clean up lines but preserve paragraph structure
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    text = '\n'.join(lines)
-    
-    # Collapse multiple spaces
-    text = re.sub(r' {2,}', ' ', text)
-    
-    return text.strip()
-
-def load_web_page():
-    """Load web page with metadata preservation"""
-    print("Загружаем страницу...")
-    html_loader = WebBaseLoader(
-        web_paths=("https://tea-mail.by/stati-o-nas/kak-pravilno-zavarivat-kitayskiy-chay/",),
-        bs_kwargs={
-            "parse_only": bs4.SoupStrainer(class_="post-info")
-        }
-    )
-    html_docs = html_loader.load()
-    
-    for doc in html_docs:
-        doc.page_content = clean_text(doc.page_content)
-        # Add source type to metadata
-        doc.metadata['source_type'] = 'web'
-        doc.metadata['topic'] = 'brewing_guide'
-        
-    print(f"Загружено {len(html_docs)} документов из HTML")
-    return html_docs
-
-def load_pdf():
-    """Load PDF with metadata preservation"""
-    print("Загружаем PDF...")
-    loader = PyMuPDFLoader(
-        file_path="data/tea_guide.pdf",
-        extract_images=False    
-    )
-
-    docs = []
-    for doc in loader.lazy_load():
-        doc.page_content = clean_text(doc.page_content)
-        # Add source type to metadata
-        doc.metadata['source_type'] = 'pdf'
-        doc.metadata['topic'] = 'tea_types'
-        docs.append(doc)
-
-    print(f"Загружено {len(docs)} страниц из PDF")
-    if docs:
-        print(f"Пример метаданных: {docs[0].metadata}")
-
-    return docs
 
 def create_db():
     """Create optimized vector database with BM25 index"""
@@ -102,7 +28,15 @@ def create_db():
     pdf_docs = load_pdf()
 
     all_docs = html_docs + pdf_docs
-    print(f"Всего документов: {len(all_docs)}")
+
+    # cleaning
+    for doc in all_docs:
+        doc.page_content = clean_text(doc.page_content)
+
+    embedding_model = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
+    all_docs_filtered = dedupe_by_embedding(filter_and_dedup(all_docs), embedding_model=embedding_model)
+    
+    print(f"Всего документов: {len(all_docs_filtered)}")
 
     # OPTIMIZED: Larger chunks with overlap for better context
     text_splitter = RecursiveCharacterTextSplitter(
@@ -112,8 +46,8 @@ def create_db():
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     
-    splitted_docs = text_splitter.split_documents(all_docs)
-    print(f"Было документов: {len(all_docs)}, стало фрагментов: {len(splitted_docs)}")
+    splitted_docs = text_splitter.split_documents(all_docs_filtered)
+    print(f"Было документов: {len(all_docs_filtered)}, стало фрагментов: {len(splitted_docs)}")
     
     # Show sample chunk for verification
     if splitted_docs:
@@ -123,7 +57,7 @@ def create_db():
     # Create semantic search index (FAISS)
     print("\nСоздание семантического индекса (FAISS)...")
     embed_model = HuggingFaceEmbeddings(
-        model_name=EMBED_MODEL,
+        model_name=EMBED_MODEL_NAME,
         model_kwargs={'device': 'cpu'},
         encode_kwargs={'normalize_embeddings': True}
     )
@@ -151,7 +85,7 @@ def load_db():
     
     # Load FAISS
     embed_model = HuggingFaceEmbeddings(
-        model_name=EMBED_MODEL,
+        model_name=EMBED_MODEL_NAME,
         model_kwargs={'device': 'cpu'},
         encode_kwargs={'normalize_embeddings': True}
     )
