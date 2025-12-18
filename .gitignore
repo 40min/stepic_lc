@@ -19,4 +19,4 @@ wheels/
 index.faiss
 index.pkl
 
-src/3-rag/vector_store_task/data/bm25_index.pkl
+bm25_index.pkl
