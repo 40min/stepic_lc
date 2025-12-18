@@ -1,15 +1,19 @@
 from pathlib import Path
 import re
+import pickle
 
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyMuPDFLoader
+from langchain.retrievers import BM25Retriever, EnsembleRetriever
 
 import bs4
 
-EMBED_MODEL = "cointegrated/rubert-tiny2"
+# EMBED_MODEL = "cointegrated/rubert-tiny2"
+EMBED_MODEL = "intfloat/multilingual-e5-small"
+
 
 def clean_text(text: str) -> str:
     """
@@ -92,7 +96,7 @@ def load_pdf():
     return docs
 
 def create_db():
-    """Create optimized vector database"""
+    """Create optimized vector database with BM25 index"""
     html_docs = load_web_page()
     pdf_docs = load_pdf()
 
@@ -100,7 +104,6 @@ def create_db():
     print(f"Всего документов: {len(all_docs)}")
 
     # OPTIMIZED: Larger chunks with overlap for better context
-    # 800 chars ≈ 200 tokens, good balance for semantic search
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=100,
@@ -116,25 +119,36 @@ def create_db():
         print(f"\nПример чанка (первые 200 символов):\n{splitted_docs[0].page_content[:200]}...")
         print(f"Метаданные чанка: {splitted_docs[0].metadata}")    
     
-    print("\nИнициализация модели эмбеддингов...")
+    # Create semantic search index (FAISS)
+    print("\nСоздание семантического индекса (FAISS)...")
     embed_model = HuggingFaceEmbeddings(
         model_name=EMBED_MODEL,
-        model_kwargs={'device': 'cpu'},  # Use 'cuda' if GPU available
-        encode_kwargs={'normalize_embeddings': True}  # Improves similarity search
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}
     )
     
-    print("Создание векторной базы...")
     vector_store = FAISS.from_documents(splitted_docs, embed_model)
-    
-    # Save with metadata
     vector_store.save_local("data/tea_index")
-    print("База создана и сохранена в data/tea_index")
+    print("FAISS индекс сохранен")
     
-    return vector_store
+    # Create BM25 keyword index
+    print("\nСоздание BM25 индекса (keyword search)...")
+    bm25_retriever = BM25Retriever.from_documents(splitted_docs)
+    bm25_retriever.k = 3  # Return top 3 results by default
+    
+    # Save BM25 index
+    with open("data/bm25_index.pkl", "wb") as f:
+        pickle.dump(bm25_retriever, f)
+    print("BM25 индекс сохранен")
+    
+    print("\n✅ Обе базы созданы и сохранены в data/")
+    return vector_store, bm25_retriever
 
-def load_db() -> FAISS:
-    """Load existing vector database"""
-    print("Загрузка векторной базы...")
+def load_db():
+    """Load both FAISS and BM25 indexes"""
+    print("Загрузка индексов...")
+    
+    # Load FAISS
     embed_model = HuggingFaceEmbeddings(
         model_name=EMBED_MODEL,
         model_kwargs={'device': 'cpu'},
@@ -145,82 +159,190 @@ def load_db() -> FAISS:
         embed_model, 
         allow_dangerous_deserialization=True
     )
-    print("База загружена")
-    return vector_store
+    
+    # Load BM25
+    with open("data/bm25_index.pkl", "rb") as f:
+        bm25_retriever = pickle.load(f)
+    
+    print("✅ Индексы загружены")
+    return vector_store, bm25_retriever
 
-def db_lookup(vector_store: FAISS, query: str, k: int = 3, max_to_output: int = 500):
+def hybrid_search(vector_store: FAISS, bm25_retriever: BM25Retriever, 
+                  query: str, k: int = 3, bm25_weight: float = 0.5):
     """
-    db lookup
+    Hybrid search combining BM25 (keyword) and semantic search
     
     Args:
-        k: Number of results
+        bm25_weight: 0.0 = pure semantic, 1.0 = pure BM25, 0.5 = balanced
+    """
+    # Create retrievers
+    semantic_retriever = vector_store.as_retriever(search_kwargs={"k": k})
+    
+    # Combine with EnsembleRetriever
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[bm25_retriever, semantic_retriever],
+        weights=[bm25_weight, 1 - bm25_weight]  # BM25 weight, Semantic weight
+    )
+    
+    # Get results
+    docs = ensemble_retriever.invoke(query)
+    return docs[:k]  # Return top k
+
+def db_lookup(vector_store: FAISS, bm25_retriever: BM25Retriever, 
+              query: str, k: int = 3, mode: str = 'hybrid', max_to_output: int = 700):
+    """
+    Search with different modes
+    
+    Args:
+        mode: 'hybrid' (default), 'semantic', 'bm25'
     """
     print(f"\n{'='*100}")
     print(f"Запрос: {query}")
+    print(f"Режим: {mode.upper()}")
     print(f"{'='*100}\n")
     
-    # Get more results for better coverage
-    docs_found = vector_store.similarity_search_with_score(query, k=k)
+    if mode == 'hybrid':
+        # Hybrid: 60% BM25 + 40% semantic (favor keywords for tea names)
+        docs_found = hybrid_search(vector_store, bm25_retriever, query, k=k, bm25_weight=0.6)
+        # Convert to list of (doc, None) tuples for consistent handling
+        docs_found = [(doc, None) for doc in docs_found]
+        
+    elif mode == 'bm25':
+        # Pure keyword search
+        bm25_retriever.k = k
+        docs = bm25_retriever.invoke(query)
+        docs_found = [(doc, None) for doc in docs]
+        
+    elif mode == 'semantic':
+        # Pure semantic search with scores
+        docs_found = vector_store.similarity_search_with_score(query, k=k)
     
-    for i, (doc, score) in enumerate(docs_found, 1):
-        print(f"Результат {i} (релевантность: {score:.4f})")
+    else:
+        print(f"❌ Неизвестный режим: {mode}")
+        return
+    
+    # Display results
+    for i, doc_tuple in enumerate(docs_found, 1):
+        doc = doc_tuple[0]
+        score = doc_tuple[1] if len(doc_tuple) > 1 and doc_tuple[1] is not None else None
+        
+        print(f"Результат {i}", end="")
+        if score is not None:
+            print(f" (релевантность: {score:.4f})", end="")
+        print()
+        
         print(f"Источник: {doc.metadata.get('source_type', 'unknown')} | "
               f"Тема: {doc.metadata.get('topic', 'unknown')}")
         if 'page' in doc.metadata:
             print(f"Страница: {doc.metadata['page']}")
+        
+        # Highlight query terms for BM25/hybrid
+        content = doc.page_content[:max_to_output]
+        if mode in ['bm25', 'hybrid']:
+            # Simple highlighting
+            query_terms = query.lower().split()
+            for term in query_terms:
+                if len(term) > 2:  # Skip short words
+                    # Highlight with >>> <<<
+                    content = re.sub(
+                        f'({re.escape(term)})', 
+                        r'>>>\1<<<', 
+                        content, 
+                        flags=re.IGNORECASE
+                    )
+        
         print(f"\nТекст ({len(doc.page_content)} символов):")
-        print(f"{doc.page_content[:max_to_output]}")
+        print(content)
         if len(doc.page_content) > max_to_output:
             print(f"... [обрезано, показано {max_to_output} из {len(doc.page_content)} символов]")
         print(f"\n{'-'*100}\n")
 
-def test_queries(vector_store: FAISS):
-    """Test with sample queries to verify quality"""
+def compare_modes(vector_store: FAISS, bm25_retriever: BM25Retriever, query: str):
+    """Compare all three search modes"""
+    print(f"\n{'#'*100}")
+    print(f"СРАВНЕНИЕ РЕЖИМОВ для: '{query}'")
+    print(f"{'#'*100}")
+    
+    for mode in ['bm25', 'semantic', 'hybrid']:
+        db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=300)
+        if mode != 'hybrid':
+            input("Нажмите Enter для следующего режима...")
+
+def test_queries(vector_store: FAISS, bm25_retriever: BM25Retriever):
+    """Test with sample queries including tea names"""
     test_cases = [
-        "гайвань",
-        "как заваривать белый чай",
-        "температура воды для зеленого чая",
-        "сколько грамм чая нужно"
+        ("гайвань", "hybrid"),
+        ("Железная богиня милосердия", "hybrid"),
+        ("как заваривать белый чай", "semantic"),
+        ("температура воды для зеленого чая", "semantic"),
     ]
     
     print("\n" + "="*100)
     print("ТЕСТИРОВАНИЕ КАЧЕСТВА ПОИСКА")
     print("="*100)
     
-    for query in test_cases:
-        db_lookup(vector_store, query, k=2, max_to_output=300)
+    for query, mode in test_cases:
+        print(f"\n🧪 Тест: {query} (режим: {mode})")
+        db_lookup(vector_store, bm25_retriever, query, k=2, mode=mode, max_to_output=400)
         input("Нажмите Enter для следующего запроса...")
 
 def main():
-    if not Path("data/tea_index").exists():
-        print("База отсутствует, создаём...")
-        vector_store = create_db()
+    # Check if both indexes exist
+    faiss_exists = Path("data/tea_index").exists()
+    bm25_exists = Path("data/bm25_index.pkl").exists()
+    
+    if not (faiss_exists and bm25_exists):
+        print("⚠️  Индексы отсутствуют, создаём...")
+        vector_store, bm25_retriever = create_db()
         
         # Run tests after creation
         print("\n" + "="*100)
         response = input("Хотите протестировать базу? (y/n): ").strip().lower()
         if response == 'y':
-            test_queries(vector_store)
+            test_queries(vector_store, bm25_retriever)
     else:
-        print("База уже создана, загружаем её")
-        vector_store = load_db()
+        print("✅ Индексы найдены, загружаем")
+        vector_store, bm25_retriever = load_db()
 
     # Interactive mode
     print("\n" + "="*100)
+    print("ГИБРИДНЫЙ ПОИСК - РЕЖИМЫ:")
+    print("  'hybrid:запрос'   - BM25 + семантика (для названий чая)")
+    print("  'bm25:запрос'     - только keyword search")
+    print("  'semantic:запрос' - только семантический поиск")
+    print("  'compare:запрос'  - сравнить все режимы")
+    print("  'запрос'          - hybrid по умолчанию")
+    print("="*100)
     print("ИНТЕРАКТИВНЫЙ РЕЖИМ (Ctrl+C для выхода)")
     print("="*100)
     
     while True:
         try:
-            user_text = input("\nВведите запрос: ").strip()            
+            user_input = input("\nВведите запрос: ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\n\nЗавершение работы.")
             break
         
-        if not user_text:
+        if not user_input:
             continue
-
-        db_lookup(vector_store, user_text, k=3, max_to_output=400)
+        
+        # Parse mode if specified
+        if ':' in user_input:
+            parts = user_input.split(':', 1)
+            if parts[0].strip() in ['hybrid', 'bm25', 'semantic', 'compare']:
+                mode = parts[0].strip()
+                query = parts[1].strip()
+            else:
+                mode = 'hybrid'
+                query = user_input
+        else:
+            mode = 'hybrid'
+            query = user_input
+        
+        if mode == 'compare':
+            compare_modes(vector_store, bm25_retriever, query)
+        else:
+            db_lookup(vector_store, bm25_retriever, query, k=3, mode=mode, max_to_output=700)
 
 if __name__ == "__main__":
     main()
