@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 import pickle
+from functools import partial
 
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -40,6 +41,8 @@ def create_db():
     """Create optimized vector database with BM25 index"""
     print("Загрузка и очистка данных параллельно...")
     
+    embedding_model = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
+
     # Parallel loading and cleaning chain
     chain = (
         RunnableParallel(
@@ -49,18 +52,12 @@ def create_db():
             pdf_ushan=load_pdf_ushan | clean_docs,
         )
         | RunnableLambda(lambda x: x["html"] + x["pdf_types"] + x["pdf_common"] + x["pdf_ushan"] + x["pdf_types"])
+        | RunnableLambda(partial(filter_and_dedup, min_length=200))
+        | RunnableLambda(partial(dedupe_by_embedding, embedding_model=embedding_model))
     )
     
     # Execute the chain
-    all_docs = chain.invoke(None)
-    
-    print(f"Всего загружено документов: {len(all_docs)}")
-
-    embedding_model = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
-    all_docs_filtered = dedupe_by_embedding(
-        docs=filter_and_dedup(all_docs, min_length=200),
-        embedding_model=embedding_model
-    )
+    all_docs_filtered = chain.invoke(None)
         
     print(f"Всего документов: {len(all_docs_filtered)}")
 

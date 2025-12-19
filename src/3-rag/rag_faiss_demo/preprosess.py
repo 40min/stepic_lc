@@ -63,6 +63,7 @@ def filter_and_dedup(docs: list[Document], min_length: int = 30) -> list[Documen
             continue
         h = hashlib.md5(text.encode("utf-8")).hexdigest()
         if h in unique_hashes:
+            print(f"Пропускаем дубликат: '{text[:50]}...'")
             stats["duplicates"] += 1
             continue
         unique_hashes.add(h)
