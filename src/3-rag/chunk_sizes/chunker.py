@@ -53,7 +53,7 @@ def run_tests(embedding_model, configs, docs, questions):
             docs_and_scores = db.similarity_search_with_score(q, k=k)
             print(f"Q: {q}")
             for doc, score in docs_and_scores:                
-                snippet = doc.page_content[:200].replace("\n", " ")
+                snippet = doc.page_content[:300].replace("\n", " ")
                 print(f" - найден фрагмент (score={score:.4f}): {snippet}... \n")
 
 def main():
