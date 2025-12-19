@@ -2,7 +2,7 @@
 # This Makefile provides commands to run the tea_guide.py script,
 # clean the tea_index directory, install dependencies, and more.
 
-.PHONY: help install run-tea clean-tea clean-all tea test-deps
+.PHONY: help install run-tea clean-tea clean-all tea test-deps info
 
 # Default target
 .DEFAULT_GOAL := help
@@ -10,7 +10,8 @@
 # Project directories
 TEA_DIR := src/3-rag/rag_faiss_demo
 DATA_DIR := $(TEA_DIR)/data
-TEA_INDEX_DIR := $(DATA_DIR)/tea_index
+TEA_INDEX_DIR := $(TEA_DIR)/indices/tea_index
+BM25_INDEX := $(TEA_DIR)/indices/bm25_index.pkl
 
 # Python executable (use uv run for project environment)
 PYTHON := uv run --quiet
@@ -67,8 +68,8 @@ run-tea:
 		echo "Warning: $(DATA_DIR)/tea_guide.pdf not found!"; \
 		echo "Please ensure the tea guide PDF is in the data directory."; \
 	fi
-	@if [ ! -d "$(TEA_INDEX_DIR)" ]; then \
-		echo "Vector database not found, it will be created on first run."; \
+	@if [ ! -d "$(TEA_INDEX_DIR)" ] || [ ! -f "$(BM25_INDEX)" ]; then \
+		echo "Vector databases not found, they will be created on first run."; \
 	fi
 	@echo ""
 	cd $(TEA_DIR) && $(PYTHON) tea_guide.py
@@ -80,12 +81,24 @@ clean-tea:
 		rm -rf $(TEA_INDEX_DIR); \
 		echo "✓ Removed $(TEA_INDEX_DIR)"; \
 	else \
-		echo "Tea index directory not found, nothing to clean."; \
+		echo "Tea index directory not found."; \
 	fi
+	@if [ -f "$(BM25_INDEX)" ]; then \
+		rm -f $(BM25_INDEX); \
+		echo "✓ Removed $(BM25_INDEX)"; \
+	else \
+		echo "BM25 index file not found."; \
+	fi
+	@echo "All vector databases cleaned."
 
 ## Setup - One-time setup (install deps + clean)
 setup: install clean-tea
 	@echo "Setup completed! You can now run 'make tea' to start the application."
+
+## Clean All - Remove all generated data (indexes and cache)
+clean-all: clean-tea
+	@echo "Cleaning all generated data..."
+	@echo "✓ All vector databases and cache cleared."
 
 ## Info - Show project information
 info:
@@ -94,7 +107,8 @@ info:
 	@echo "Script location: $(TEA_DIR)/tea_guide.py"
 	@echo "Data directory: $(DATA_DIR)"
 	@echo "Vector database: $(TEA_INDEX_DIR)"
-	@echo "PDF file: $(DATA_DIR)/tea_guide.pdf"
+	@echo "BM25 index: $(BM25_INDEX)"
+	@echo "PDF files: $(DATA_DIR)/*.pdf"
 	@echo ""
 	@echo "Dependencies required:"
 	@echo "  - langchain-community (document loaders, FAISS)"
@@ -106,9 +120,14 @@ info:
 	@echo ""
 	@echo "The application loads tea information from:"
 	@echo "  1. Web page: https://tea-mail.by/stati-o-nas/kak-pravilno-zavarivat-kitayskiy-chay/"
-	@echo "  2. PDF file: $(DATA_DIR)/tea_guide.pdf"
+	@echo "  2. PDF files:"
+	@echo "     - $(DATA_DIR)/tea_guide.pdf (tea types)"
+	@echo "     - $(DATA_DIR)/all_you_need_to_know.pdf (general info)"
+	@echo "     - $(DATA_DIR)/locations_ushan.pdf (ushan locations)"
 	@echo ""
 	@echo "Vector database features:"
-	@echo "  - Multilingual embeddings (intfloat/multilingual-e5-small)"
+	@echo "  - Multilingual embeddings (cointegrated/rubert-tiny2)"
+	@echo "  - Advanced text preprocessing and deduplication"
+	@echo "  - Hybrid search (60% BM25 + 40% semantic)"
 	@echo "  - Optimized chunking (800 chars, 100 overlap)"
 	@echo "  - Interactive querying with similarity search"
