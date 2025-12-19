@@ -19,25 +19,33 @@ CONFIGS = [
 
 SRC_URL = "https://ru.wikipedia.org/wiki/%D0%98%D0%BD%D0%B4%D0%BE%D0%BD%D0%B5%D0%B7%D0%B8%D1%8F"
 QUESTIONS = [
-    "столица Индонезии и планы переноса",
-    "население Индонезии по переписи 2020 года",
+    "столица Индонезии",
+    "население Индонезии",
     "какие острова входят в состав Индонезии",
-    "история провозглашения независимости Индонезии 1945",
-    "президент Индонезии Прабово Субианто",
-    "религиозный состав населения Индонезии ислам",
-    "вулканы Индонезии Кракатау извержение",
+    "история провозглашения независимости Индонезии",
+    "президент Индонезии",
+    "религиозный состав населения Индонезии",
+    "вулканы Индонезии",
+    "Кракатау извержение",
     "административное деление провинции Индонезии",
-    "экономика Индонезии ВВП 2023",
+    "экономика Индонезии",
     "индонезийский язык государственный",
     "яванцы крупнейший народ Индонезии",
     "период Нового порядка Сухарто",
-    "Боробудур буддистский храм архитектура",
+    "буддистский храм архитектура",
     "Движение 30 сентября 1965 переворот",
-    "бадминтон олимпийские медали Индонезии"
+    "олимпийские медали Индонезии",
+    "бадминтон",
 ]
 
 
-def run_tests(embedding_model, configs, docs, questions):
+def output_sample_text(text, max_len_of_sample):
+    snippet = text[:max_len_of_sample].replace("\n", " ")
+    is_cut = len(text) > max_len_of_sample
+    print(f"   📄 Пример: {snippet}{"..." if is_cut else ""}")
+
+
+def run_tests(embedding_model, configs, docs, questions, max_len_of_sample=500):
     # Создаем базы данных для каждой конфигурации
     dbs = []
     for cfg in configs:
@@ -59,6 +67,9 @@ def run_tests(embedding_model, configs, docs, questions):
     print("🚀 НАЧАЛО ТЕСТИРОВАНИЯ ВОПРОСОВ")
     print("="*80 + "\n")
 
+    # Инициализация статистики побед для каждой конфигурации
+    win_stats = {cfg['name']: 0 for cfg in configs}
+
     for q in questions:
         print(f"🔍 Вопрос: {q}")
         print("-" * 40)
@@ -76,26 +87,46 @@ def run_tests(embedding_model, configs, docs, questions):
                 'avg_score': avg_score
             })
 
-        # Сортируем по среднему скору (высокий скор - лучше)
-        sorted_results = sorted(results_per_config, key=lambda x: x['avg_score'], reverse=True)
+        # Сортируем по среднему скору (низкий скор - лучше для FAISS distance)
+        sorted_results = sorted(results_per_config, key=lambda x: x['avg_score'])
 
         # Лучшая конфигурация (самый низкий средний скор)
         best = sorted_results[0]
+        win_stats[best['config']['name']] += 1
+        
         print(f"🏆 Лучшая конфигурация: {best['config']['name']} (avg_score={best['avg_score']:.4f})")
-        if best['docs_and_scores']:
-            snippet = best['docs_and_scores'][0][0].page_content[:300].replace("\n", " ")
-            print(f"   📄 Пример: {snippet}...")
+        if best['docs_and_scores']:            
+            original_text = best['docs_and_scores'][0][0].page_content            
+            output_sample_text(original_text, max_len_of_sample)
 
         # Худшая конфигурация (самый высокий средний скор)
         worst = sorted_results[-1]
         print(f"👎 Худшая конфигурация: {worst['config']['name']} (avg_score={worst['avg_score']:.4f})")
         if worst['docs_and_scores']:
-            original_text = worst['docs_and_scores'][0][0].page_content
-            snippet = original_text[:300].replace("\n", " ")
-            is_cut = len(original_text) > 300
-            print(f"   📄 Пример текста: {snippet}{"..." if is_cut else ""}")
+            original_text = worst['docs_and_scores'][0][0].page_content            
+            output_sample_text(original_text, max_len_of_sample)            
 
         print("\n" + "-"*60 + "\n")
+
+    # Вывод итоговой статистики
+    print("\n" + "="*80)
+    print("📈 ИТОГОВАЯ СТАТИСТИКА ПОБЕД")
+    print("="*80 + "\n")
+    
+    # Сортируем по количеству побед
+    sorted_stats = sorted(win_stats.items(), key=lambda x: x[1], reverse=True)
+    
+    total_questions = len(questions)
+    for rank, (config_name, wins) in enumerate(sorted_stats, 1):
+        percentage = (wins / total_questions) * 100
+        bar_length = int(percentage / 2)  # Масштаб для визуализации
+        bar = "█" * bar_length
+        print(f"{rank}. {config_name:20s} | {wins:2d}/{total_questions} побед ({percentage:5.1f}%) {bar}")
+    
+    print("\n" + "="*80)
+    winner = sorted_stats[0]
+    print(f"🎉 ПОБЕДИТЕЛЬ: {winner[0]} с {winner[1]} победами из {total_questions} вопросов!")
+    print("="*80 + "\n")
 
 def main():
     print("Загрузка данных...")
