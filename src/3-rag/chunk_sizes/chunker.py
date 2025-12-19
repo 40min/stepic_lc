@@ -34,6 +34,8 @@ QUESTIONS = [
 
 
 def run_tests(embedding_model, configs, docs, questions):
+    # Создаем базы данных для каждой конфигурации
+    dbs = []
     for cfg in configs:
         splitter = make_splitter(cfg)
         chunks = []
@@ -42,19 +44,52 @@ def run_tests(embedding_model, configs, docs, questions):
                 md = (doc.metadata or {}).copy() if hasattr(doc, "metadata") else {}
                 chunks.append(Document(page_content=chunk_text, metadata=md))
 
-        print(f"\nКонфигурация: {cfg['name']} "
+        print(f"📊 Создание БД для конфигурации: {cfg['name']} "
               f"(chunk_size={cfg['chunk_size']}, overlap={cfg['chunk_overlap']}), "
-            f"всего чанков={len(chunks)}")
+              f"всего чанков={len(chunks)}")
 
         db = FAISS.from_documents(chunks, embedding_model)
+        dbs.append(db)
 
-        for q in questions:
+    print("\n" + "="*80)
+    print("🚀 НАЧАЛО ТЕСТИРОВАНИЯ ВОПРОСОВ")
+    print("="*80 + "\n")
+
+    for q in questions:
+        print(f"🔍 Вопрос: {q}")
+        print("-" * 40)
+
+        results_per_config = []
+        for i, cfg in enumerate(configs):
             k = cfg.get("k", 2)
-            docs_and_scores = db.similarity_search_with_score(q, k=k)
-            print(f"Q: {q}")
-            for doc, score in docs_and_scores:                
-                snippet = doc.page_content[:300].replace("\n", " ")
-                print(f" - найден фрагмент (score={score:.4f}): {snippet}... \n")
+            docs_and_scores = dbs[i].similarity_search_with_score(q, k=k)
+            scores = [score for _, score in docs_and_scores]
+            avg_score = sum(scores) / len(scores) if scores else float('inf')
+            results_per_config.append({
+                'config': cfg,
+                'scores': scores,
+                'docs_and_scores': docs_and_scores,
+                'avg_score': avg_score
+            })
+
+        # Сортируем по среднему скору (нижний скор - лучше)
+        sorted_results = sorted(results_per_config, key=lambda x: x['avg_score'])
+
+        # Лучшая конфигурация (самый низкий средний скор)
+        best = sorted_results[0]
+        print(f"🏆 Лучшая конфигурация: {best['config']['name']} (avg_score={best['avg_score']:.4f})")
+        if best['docs_and_scores']:
+            snippet = best['docs_and_scores'][0][0].page_content[:300].replace("\n", " ")
+            print(f"   📄 Пример текста: {snippet}...")
+
+        # Худшая конфигурация (самый высокий средний скор)
+        worst = sorted_results[-1]
+        print(f"👎 Худшая конфигурация: {worst['config']['name']} (avg_score={worst['avg_score']:.4f})")
+        if worst['docs_and_scores']:
+            snippet = worst['docs_and_scores'][0][0].page_content[:300].replace("\n", " ")
+            print(f"   📄 Пример текста: {snippet}...")
+
+        print("\n" + "-"*60 + "\n")
 
 def main():
     print("Загрузка данных...")
