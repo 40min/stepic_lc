@@ -2,13 +2,14 @@
 # This Makefile provides commands to run the tea_guide.py script,
 # clean the tea_index directory, install dependencies, and more.
 
-.PHONY: help install run-tea clean-tea clean-all tea test-deps info
+.PHONY: help install run-tea clean-tea clean-all tea test-deps info chunker run-chunker
 
 # Default target
 .DEFAULT_GOAL := help
 
 # Project directories
 TEA_DIR := src/3-rag/rag_faiss_demo
+CHUNKER_DIR := src/3-rag/chunk_sizes
 DATA_DIR := $(TEA_DIR)/data
 TEA_INDEX_DIR := $(TEA_DIR)/indices/tea_index
 BM25_INDEX := $(TEA_DIR)/indices/bm25_index.pkl
@@ -28,6 +29,10 @@ help:
 	@echo "  tea          Run the tea guide RAG application"
 	@echo "  run-tea      Alias for 'tea' command"
 	@echo ""
+	@echo "Chunker Commands:"
+	@echo "  chunker      Run the chunk size optimization script"
+	@echo "  run-chunker  Alias for 'chunker' command"
+	@echo ""
 	@echo "Cleaning Commands:"
 	@echo "  clean-tea    Remove the tea_index vector database"
 	@echo "  clean-all    Remove all generated data (tea_index and cache)"
@@ -35,10 +40,14 @@ help:
 	@echo "Examples:"
 	@echo "  make install       # Install dependencies first"
 	@echo "  make tea           # Run the tea guide application"
+	@echo "  make chunker       # Run the chunk size optimization script"
 	@echo "  make clean-tea     # Clean the vector database"
 	@echo ""
 	@echo "The tea guide allows you to query Chinese tea information"
 	@echo "using a RAG (Retrieval-Augmented Generation) system."
+	@echo ""
+	@echo "The chunker script tests different chunk sizes and overlaps"
+	@echo "for optimal retrieval performance on RAG systems."
 
 ## Install - Install project dependencies
 install:
@@ -90,6 +99,17 @@ clean-tea:
 		echo "BM25 index file not found."; \
 	fi
 	@echo "All vector databases cleaned."
+
+## Chunker - Run the chunk size optimization script
+chunker: run-chunker
+
+## Run Chunker - Run the chunker from the correct directory
+run-chunker:
+	@echo "Starting Chunker Optimization Script..."
+	@echo "Working directory: $(CHUNKER_DIR)"
+	@echo "This script tests different chunk sizes and overlaps for RAG optimization."
+	@echo ""
+	cd $(CHUNKER_DIR) && $(PYTHON) chunker.py
 
 ## Setup - One-time setup (install deps + clean)
 setup: install clean-tea
