@@ -1,6 +1,5 @@
 from langchain_core.runnables import RunnableLambda, RunnableParallel
 from langchain_community.document_loaders import PyMuPDFLoader, WebBaseLoader
-from langchain_text_splitters import TokenTextSplitter
 import bs4
 
 # 1. СОЗДАНИЕ RUNNABLE ЗАГРУЗЧИКОВ

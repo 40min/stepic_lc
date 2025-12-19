@@ -21,19 +21,19 @@ def load_web_page():
     print(f"Загружено {len(html_docs)} документов из HTML")
     return html_docs
 
-def load_pdf():
+def load_pdf(file_path: str, topic: str, source_type: str = "pdf"):
     """Load PDF with metadata preservation"""
     print("Загружаем PDF...")
     loader = PyMuPDFLoader(
-        file_path="data/tea_guide.pdf",
+        file_path=file_path,
         extract_images=False    
     )
 
     docs = []
     for doc in loader.lazy_load():        
         # Add source type to metadata
-        doc.metadata['source_type'] = 'pdf'
-        doc.metadata['topic'] = 'tea_types'
+        doc.metadata['source_type'] = source_type
+        doc.metadata['topic'] = topic
         docs.append(doc)
 
     print(f"Загружено {len(docs)} страниц из PDF")

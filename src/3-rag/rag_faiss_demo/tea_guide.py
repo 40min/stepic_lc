@@ -25,17 +25,22 @@ EMBED_MODEL_NAME = "cointegrated/rubert-tiny2"
 def create_db():
     """Create optimized vector database with BM25 index"""
     html_docs = load_web_page()
-    pdf_docs = load_pdf()
+    pdf_doc_types = load_pdf("data/tea_guide.pdf", topic="tea_types")
+    pdf_doc_common = load_pdf("data/all_you_need_to_know.pdf", topic="common_information")
+    pdf_docs_ushan = load_pdf("data/locations_ushan.pdf", topic="locations_ushan")
 
-    all_docs = html_docs + pdf_docs
+    all_docs = html_docs + pdf_doc_types + pdf_doc_common + pdf_docs_ushan + pdf_doc_types
 
     # cleaning
     for doc in all_docs:
         doc.page_content = clean_text(doc.page_content)
 
     embedding_model = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
-    all_docs_filtered = dedupe_by_embedding(filter_and_dedup(all_docs), embedding_model=embedding_model)
-    
+    all_docs_filtered = dedupe_by_embedding(
+        docs=filter_and_dedup(all_docs, min_length=200), 
+        embedding_model=embedding_model
+    )
+        
     print(f"Всего документов: {len(all_docs_filtered)}")
 
     # OPTIMIZED: Larger chunks with overlap for better context
@@ -63,7 +68,7 @@ def create_db():
     )
     
     vector_store = FAISS.from_documents(splitted_docs, embed_model)
-    vector_store.save_local("data/tea_index")
+    vector_store.save_local("indices/tea_index")
     print("FAISS индекс сохранен")
     
     # Create BM25 keyword index
@@ -72,11 +77,11 @@ def create_db():
     bm25_retriever.k = 3  # Return top 3 results by default
     
     # Save BM25 index
-    with open("data/bm25_index.pkl", "wb") as f:
+    with open("indices/bm25_index.pkl", "wb") as f:
         pickle.dump(bm25_retriever, f)
     print("BM25 индекс сохранен")
     
-    print("\n✅ Обе базы созданы и сохранены в data/")
+    print("\n✅ Обе базы созданы и сохранены в indices/")
     return vector_store, bm25_retriever
 
 def load_db():
@@ -90,13 +95,13 @@ def load_db():
         encode_kwargs={'normalize_embeddings': True}
     )
     vector_store = FAISS.load_local(
-        "data/tea_index", 
+        "indices/tea_index", 
         embed_model, 
         allow_dangerous_deserialization=True
     )
     
     # Load BM25
-    with open("data/bm25_index.pkl", "rb") as f:
+    with open("indices/bm25_index.pkl", "rb") as f:
         bm25_retriever = pickle.load(f)
     
     print("✅ Индексы загружены")
@@ -228,8 +233,8 @@ def test_queries(vector_store: FAISS, bm25_retriever: BM25Retriever):
 
 def main():
     # Check if both indexes exist
-    faiss_exists = Path("data/tea_index").exists()
-    bm25_exists = Path("data/bm25_index.pkl").exists()
+    faiss_exists = Path("indices/tea_index").exists()
+    bm25_exists = Path("indices/bm25_index.pkl").exists()
     
     if not (faiss_exists and bm25_exists):
         print("⚠️  Индексы отсутствуют, создаём базу данных...")
