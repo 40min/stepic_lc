@@ -8,12 +8,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
+from langchain_core.runnables import RunnableLambda, RunnableParallel
 
-from loaders import load_web_page, load_pdf
+from loaders import load_html, load_pdf_types, load_pdf_common, load_pdf_ushan
 from preprosess import (
-    clean_text, 
-    dedupe_by_embedding, 
-    filter_and_dedup, 
+    clean_text,
+    dedupe_by_embedding,
+    filter_and_dedup,
 )
 
 
@@ -22,22 +23,42 @@ EMBED_MODEL_NAME = "cointegrated/rubert-tiny2"
 # EMBED_MODEL = "intfloat/multilingual-e5-small"
 
 
+# RUNNABLE CLEANER
+def apply_func_to_all_docs(func):
+    """Helper to apply a function to all documents in a list"""
+    def process_docs(docs):
+        for doc in docs:
+            doc.page_content = func(doc.page_content)
+        return docs
+    return process_docs
+
+
+clean_docs = RunnableLambda(apply_func_to_all_docs(clean_text))
+
+
 def create_db():
     """Create optimized vector database with BM25 index"""
-    html_docs = load_web_page()
-    pdf_doc_types = load_pdf("data/tea_guide.pdf", topic="tea_types")
-    pdf_doc_common = load_pdf("data/all_you_need_to_know.pdf", topic="common_information")
-    pdf_docs_ushan = load_pdf("data/locations_ushan.pdf", topic="locations_ushan")
-
-    all_docs = html_docs + pdf_doc_types + pdf_doc_common + pdf_docs_ushan + pdf_doc_types
-
-    # cleaning
-    for doc in all_docs:
-        doc.page_content = clean_text(doc.page_content)
+    print("Загрузка и очистка данных параллельно...")
+    
+    # Parallel loading and cleaning chain
+    chain = (
+        RunnableParallel(
+            html=load_html | clean_docs,
+            pdf_types=load_pdf_types | clean_docs,
+            pdf_common=load_pdf_common | clean_docs,
+            pdf_ushan=load_pdf_ushan | clean_docs,
+        )
+        | RunnableLambda(lambda x: x["html"] + x["pdf_types"] + x["pdf_common"] + x["pdf_ushan"] + x["pdf_types"])
+    )
+    
+    # Execute the chain
+    all_docs = chain.invoke(None)
+    
+    print(f"Всего загружено документов: {len(all_docs)}")
 
     embedding_model = HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
     all_docs_filtered = dedupe_by_embedding(
-        docs=filter_and_dedup(all_docs, min_length=200), 
+        docs=filter_and_dedup(all_docs, min_length=200),
         embedding_model=embedding_model
     )
         

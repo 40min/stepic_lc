@@ -1,43 +1,43 @@
 from langchain_community.document_loaders import WebBaseLoader, PyMuPDFLoader
+from langchain_core.runnables import RunnableLambda
 import bs4
 
 
-def load_web_page():
-    """Load web page with metadata preservation"""
-    print("Загружаем страницу...")
-    html_loader = WebBaseLoader(
+class LoaderRunnable(RunnableLambda):
+    """Wrapper to make loaders compatible with RunnableParallel"""
+    def __init__(self, loader, topic: str, source_type: str = "pdf"):
+        def load_and_tag(_):
+            docs = list(loader.lazy_load())
+            for doc in docs:
+                doc.metadata['source_type'] = source_type
+                doc.metadata['topic'] = topic
+            print(f"Загружено {len(docs)} документов ({topic})")
+            print(f"Пример метаданных: {docs[0].metadata}")
+            return docs
+        super().__init__(load_and_tag)
+
+
+# Create loader runnables for each data source
+load_html = LoaderRunnable(
+    WebBaseLoader(
         web_paths=("https://tea-mail.by/stati-o-nas/kak-pravilno-zavarivat-kitayskiy-chay/",),
-        bs_kwargs={
-            "parse_only": bs4.SoupStrainer(class_="post-info")
-        }
-    )
-    html_docs = html_loader.load()
-    
-    for doc in html_docs:        
-        # Add source type to metadata
-        doc.metadata['source_type'] = 'web'
-        doc.metadata['topic'] = 'brewing_guide'
-        
-    print(f"Загружено {len(html_docs)} документов из HTML")
-    return html_docs
+        bs_kwargs={"parse_only": bs4.SoupStrainer(class_="post-info")}
+    ),
+    topic="brewing_guide",
+    source_type="web"
+)
 
-def load_pdf(file_path: str, topic: str, source_type: str = "pdf"):
-    """Load PDF with metadata preservation"""
-    print("Загружаем PDF...")
-    loader = PyMuPDFLoader(
-        file_path=file_path,
-        extract_images=False    
-    )
+load_pdf_types = LoaderRunnable(
+    PyMuPDFLoader(file_path="data/tea_guide.pdf", extract_images=False),
+    topic="tea_types"
+)
 
-    docs = []
-    for doc in loader.lazy_load():        
-        # Add source type to metadata
-        doc.metadata['source_type'] = source_type
-        doc.metadata['topic'] = topic
-        docs.append(doc)
+load_pdf_common = LoaderRunnable(
+    PyMuPDFLoader(file_path="data/all_you_need_to_know.pdf", extract_images=False),
+    topic="common_information"
+)
 
-    print(f"Загружено {len(docs)} страниц из PDF")
-    if docs:
-        print(f"Пример метаданных: {docs[0].metadata}")
-
-    return docs
+load_pdf_ushan = LoaderRunnable(
+    PyMuPDFLoader(file_path="data/locations_ushan.pdf", extract_images=False),
+    topic="locations_ushan"
+)
