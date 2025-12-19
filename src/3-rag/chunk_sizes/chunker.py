@@ -1,4 +1,7 @@
 # импорты
+import os
+import click
+from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
@@ -8,6 +11,8 @@ from utils import (
     load_data_from_url,
     clean_wikipedia_text,
 )
+from llm_assessor import LLMAssessor
+from evaluators import ScoreBasedEvaluator, LLMBasedEvaluator
 
 # схема конфигураций
 CONFIGS = [
@@ -45,7 +50,41 @@ def output_sample_text(text, max_len_of_sample):
     print(f"   📄 Пример: {snippet}{"..." if is_cut else ""}")
 
 
-def run_tests(embedding_model, configs, docs, questions, max_len_of_sample=500):
+def run_tests(
+        embedding_model, 
+        configs, 
+        docs, 
+        questions, 
+        llm_model,
+        api_key,
+        max_len_of_sample=500,
+        evaluation_mode="score-based",
+):
+    """
+    Run tests with different evaluation modes
+    
+    Args:
+        embedding_model: Embedding model for vector search
+        configs: List of chunking configurations
+        docs: List of documents to chunk
+        questions: List of test questions
+        max_len_of_sample: Max length for sample output
+        evaluation_mode: "score-based" or "llm-based"
+        llm_model: Model name for LLM assessment (optional)
+    """
+    # Validate evaluation mode
+    if evaluation_mode not in ["score-based", "llm-based"]:
+        raise ValueError(f"Invalid evaluation_mode: {evaluation_mode}")
+    
+    # Initialize evaluator based on mode
+    if evaluation_mode == "llm-based":
+        assessor = LLMAssessor(model_name=llm_model, api_key=api_key)
+        evaluator = LLMBasedEvaluator(assessor)
+        print(f"✅ LLM evaluator initialized")
+    else:
+        evaluator = ScoreBasedEvaluator()
+        print(f"✅ Score-based evaluator initialized")
+    
     # Создаем базы данных для каждой конфигурации
     dbs = []
     for cfg in configs:
@@ -72,40 +111,44 @@ def run_tests(embedding_model, configs, docs, questions, max_len_of_sample=500):
 
     for q in questions:
         print(f"🔍 Вопрос: {q}")
+        print(f"📊 Evaluation Mode: {evaluation_mode}")
         print("-" * 40)
 
-        results_per_config = []
-        for i, cfg in enumerate(configs):
-            k = cfg.get("k", 2)
-            docs_and_scores = dbs[i].similarity_search_with_score(q, k=k)
-            scores = [score for _, score in docs_and_scores]
-            avg_score = sum(scores) / len(scores) if scores else float('inf')
-            results_per_config.append({
-                'config': cfg,
-                'scores': scores,
-                'docs_and_scores': docs_and_scores,
-                'avg_score': avg_score
-            })
-
-        # Сортируем по среднему скору (низкий скор - лучше для FAISS distance)
-        sorted_results = sorted(results_per_config, key=lambda x: x['avg_score'])
-
-        # Лучшая конфигурация (самый низкий средний скор)
-        best = sorted_results[0]
-        win_stats[best['config']['name']] += 1
+        # Use evaluator to get results
+        k = configs[0].get("k", 2)
+        sorted_results = evaluator.evaluate(dbs, configs, q, k=k)
         
-        print(f"🏆 Лучшая конфигурация: {best['config']['name']} (avg_score={best['avg_score']:.4f})")
-        if best['docs_and_scores']:            
-            original_text = best['docs_and_scores'][0][0].page_content            
-            output_sample_text(original_text, max_len_of_sample)
-
-        # Худшая конфигурация (самый высокий средний скор)
+        # Update winner tracking and output
+        best = sorted_results[0]
+        config_name = best['config']['name']
+        win_stats[config_name] += 1
+        
+        # Output results based on mode
+        if evaluation_mode == "score-based":
+            print(f"🏆 Лучшая конфигурация: {config_name} (avg_score={best['avg_score']:.4f})")
+            if best.get('docs_and_scores'):
+                original_text = best['docs_and_scores'][0][0].page_content
+                output_sample_text(original_text, max_len_of_sample)
+        elif evaluation_mode == "llm-based":
+            print(f"🏆 Лучшая конфигурация: {config_name} (llm_score={best['llm_score']}/100)")
+            print(f"   💡 Reasoning: {best['reasoning']}")
+            if best.get('doc'):
+                output_sample_text(best['doc'].page_content, max_len_of_sample)
+        
+        # Show worst configuration
         worst = sorted_results[-1]
-        print(f"👎 Худшая конфигурация: {worst['config']['name']} (avg_score={worst['avg_score']:.4f})")
-        if worst['docs_and_scores']:
-            original_text = worst['docs_and_scores'][0][0].page_content            
-            output_sample_text(original_text, max_len_of_sample)            
-
+        worst_config_name = worst['config']['name']
+        if evaluation_mode == "score-based":
+            print(f"👎 Худшая конфигурация: {worst_config_name} (avg_score={worst['avg_score']:.4f})")
+            if worst.get('docs_and_scores'):
+                original_text = worst['docs_and_scores'][0][0].page_content
+                output_sample_text(original_text, max_len_of_sample)
+        elif evaluation_mode == "llm-based":
+            print(f"👎 Худшая конфигурация: {worst_config_name} (llm_score={worst['llm_score']}/100)")
+            print(f"   💡 Reasoning: {worst['reasoning']}")
+            if worst.get('doc'):
+                output_sample_text(worst['doc'].page_content, max_len_of_sample)
+        
         print("\n" + "-"*60 + "\n")
 
     # Вывод итоговой статистики
@@ -128,14 +171,44 @@ def run_tests(embedding_model, configs, docs, questions, max_len_of_sample=500):
     print(f"🎉 ПОБЕДИТЕЛЬ: {winner[0]} с {winner[1]} победами из {total_questions} вопросов!")
     print("="*80 + "\n")
 
-def main():
+@click.command()
+@click.option(
+    '--eval-mode',
+    type=click.Choice(['score-based', 'llm-based']),
+    default='score-based',
+    help='Evaluation mode for chunk quality'
+)
+def main(eval_mode):
+    """Evaluate RAG chunking strategies"""
+    # Load environment
+    load_dotenv()
+    
     print("Загрузка данных...")
     docs = load_data_from_url(SRC_URL)
-    docs_cleaned = [Document(page_content=clean_wikipedia_text(doc.page_content), metadata=doc.metadata) for doc in docs]
+    docs_cleaned = [
+        Document(
+            page_content=clean_wikipedia_text(doc.page_content), 
+            metadata=doc.metadata
+        ) 
+        for doc in docs
+    ]
+    
     print("Загрузка модели...")
     embedding_model = HuggingFaceEmbeddings(model_name="cointegrated/rubert-tiny2")
-    print("Запуск тестов...")
-    run_tests(embedding_model, CONFIGS, docs_cleaned, QUESTIONS)
+
+    llm_model = os.getenv("OPENROUTER_API_MODEL", "x-ai/grok-4-fast")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    
+    print(f"Запуск тестов (режим: {eval_mode})...")
+    run_tests(
+        embedding_model, 
+        CONFIGS, 
+        docs_cleaned, 
+        QUESTIONS,
+        llm_model=llm_model,
+        api_key=api_key,
+        evaluation_mode=eval_mode,
+    )
 
 if __name__ == "__main__":
     main()

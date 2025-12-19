@@ -2,7 +2,7 @@
 # This Makefile provides commands to run the tea_guide.py script,
 # clean the tea_index directory, install dependencies, and more.
 
-.PHONY: help install run-tea clean-tea clean-all tea test-deps info chunker run-chunker
+.PHONY: help install run-tea clean-tea clean-all tea test-deps info chunker run-chunker chunker-llm
 
 # Default target
 .DEFAULT_GOAL := help
@@ -30,8 +30,9 @@ help:
 	@echo "  run-tea      Alias for 'tea' command"
 	@echo ""
 	@echo "Chunker Commands:"
-	@echo "  chunker      Run the chunk size optimization script"
+	@echo "  chunker      Run chunk size optimization (score-based, fast)"
 	@echo "  run-chunker  Alias for 'chunker' command"
+	@echo "  chunker-llm  Run chunk size optimization (LLM-based, with reasoning)"
 	@echo ""
 	@echo "Cleaning Commands:"
 	@echo "  clean-tea    Remove the tea_index vector database"
@@ -103,13 +104,22 @@ clean-tea:
 ## Chunker - Run the chunk size optimization script
 chunker: run-chunker
 
-## Run Chunker - Run the chunker from the correct directory
+## Run Chunker - Run the chunker from the correct directory (score-based)
 run-chunker:
-	@echo "Starting Chunker Optimization Script..."
+	@echo "Starting Chunker Optimization Script (Score-based)..."
 	@echo "Working directory: $(CHUNKER_DIR)"
 	@echo "This script tests different chunk sizes and overlaps for RAG optimization."
 	@echo ""
 	cd $(CHUNKER_DIR) && $(PYTHON) chunker.py
+
+## Chunker LLM - Run the chunker with LLM-based evaluation
+chunker-llm:
+	@echo "Starting Chunker Optimization Script (LLM-based)..."
+	@echo "Working directory: $(CHUNKER_DIR)"
+	@echo "This uses LLM to assess chunk quality with reasoning."
+	@echo "Note: Requires OPENROUTER_API_KEY in .env file"
+	@echo ""
+	cd $(CHUNKER_DIR) && $(PYTHON) chunker.py --eval-mode llm-based
 
 ## Setup - One-time setup (install deps + clean)
 setup: install clean-tea

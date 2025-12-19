@@ -16,10 +16,16 @@ stepic_lc/
 │   ├── 1-console-chat-bot/
 │   │   ├── bot.py          # Main CLI bot implementation
 │   │   └── chains.py       # Basic LangChain chain examples
-│   └── 2-prompt-engineering/
-│       ├── chain_on_messages.py  # Complex chain with message handling
-│       └── valid_json_out.py     # JSON output validation with Pydantic
+│   ├── 2-prompt-engineering/
+│   │   ├── chain_on_messages.py  # Complex chain with message handling
+│   │   └── valid_json_out.py     # JSON output validation with Pydantic
+│   └── 3-rag/
+│       └── chunk_sizes/
+│           ├── chunker.py        # RAG chunking strategy evaluator
+│           ├── llm_assessor.py  # LLM-based chunk quality assessment
+│           └── evaluators.py    # Evaluation strategies
 ├── pyproject.toml          # Project configuration and dependencies
+├── Makefile               # Build and run commands
 └── README.md              # This file
 ```
 
@@ -94,6 +100,35 @@ python src/2-prompt-engineering/chain_on_messages.py
 # JSON output validation
 python src/2-prompt-engineering/valid_json_out.py
 ```
+
+### 3. RAG Chunking Strategy Evaluation
+
+Evaluate different chunking strategies for RAG systems using score-based or LLM-based assessment:
+
+```bash
+# Score-based evaluation (default, fast, uses FAISS similarity)
+make chunker
+# or
+uv run python src/3-rag/chunk_sizes/chunker.py
+
+# LLM-based evaluation (slower, provides reasoning, requires API key)
+make chunker-llm
+# or
+uv run python src/3-rag/chunk_sizes/chunker.py --eval-mode llm-based
+
+# Use specific LLM model
+uv run python src/3-rag/chunk_sizes/chunker.py --eval-mode llm-based --llm-model anthropic/claude-3-opus
+```
+
+**Evaluation Modes:**
+- **score-based**: Fast FAISS distance-based evaluation (semantic similarity)
+- **llm-based**: LLM assesses chunk usefulness with reasoning (requires `OPENROUTER_API_KEY`)
+
+**Features:**
+- Tests multiple chunking configurations (sparse, dense, hybrid)
+- Evaluates retrieval quality on 17 test questions about Indonesia
+- Provides winner statistics and sample outputs
+- LLM mode includes reasoning for each assessment
 
 ## Dependencies
 
