@@ -2,7 +2,7 @@
 # This Makefile provides commands to run the tea_guide.py script,
 # clean the tea_index directory, install dependencies, and more.
 
-.PHONY: help install run-tea clean-tea clean-all tea test-deps info chunker run-chunker chunker-llm
+.PHONY: help install run-tea clean-tea clean-all tea test-deps info chunker run-chunker chunker-llm eval run-eval
 
 # Default target
 .DEFAULT_GOAL := help
@@ -10,6 +10,7 @@
 # Project directories
 TEA_DIR := src/3-rag/rag_faiss_demo
 CHUNKER_DIR := src/3-rag/chunk_sizes
+EVAL_DIR := src/3-rag/eval_test
 DATA_DIR := $(TEA_DIR)/data
 TEA_INDEX_DIR := $(TEA_DIR)/indices/tea_index
 BM25_INDEX := $(TEA_DIR)/indices/bm25_index.pkl
@@ -34,6 +35,10 @@ help:
 	@echo "  run-chunker  Alias for 'chunker' command"
 	@echo "  chunker-llm  Run chunk size optimization (LLM-based, with reasoning)"
 	@echo ""
+	@echo "Evaluation Commands:"
+	@echo "  eval         Run comprehensive RAG evaluation (retrieval + answer quality)"
+	@echo "  run-eval     Alias for 'eval' command"
+	@echo ""
 	@echo "Cleaning Commands:"
 	@echo "  clean-tea    Remove the tea_index vector database"
 	@echo "  clean-all    Remove all generated data (tea_index and cache)"
@@ -42,6 +47,7 @@ help:
 	@echo "  make install       # Install dependencies first"
 	@echo "  make tea           # Run the tea guide application"
 	@echo "  make chunker       # Run the chunk size optimization script"
+	@echo "  make eval          # Run the RAG evaluation system"
 	@echo "  make clean-tea     # Clean the vector database"
 	@echo ""
 	@echo "The tea guide allows you to query Chinese tea information"
@@ -121,6 +127,18 @@ chunker-llm:
 	@echo ""
 	cd $(CHUNKER_DIR) && $(PYTHON) chunker.py --eval-mode llm-based
 
+## Eval - Run the comprehensive RAG evaluation system
+eval: run-eval
+
+## Run Eval - Run the evaluation from the correct directory
+run-eval:
+	@echo "Starting RAG Evaluation System..."
+	@echo "Working directory: $(EVAL_DIR)"
+	@echo "This script evaluates RAG performance using retrieval metrics and LLM assessment."
+	@echo "Note: Requires OPENROUTER_API_KEY in .env file for LLM-based answer quality assessment"
+	@echo ""
+	cd $(EVAL_DIR) && $(PYTHON) eval.py
+
 ## Setup - One-time setup (install deps + clean)
 setup: install clean-tea
 	@echo "Setup completed! You can now run 'make tea' to start the application."
@@ -161,3 +179,11 @@ info:
 	@echo "  - Hybrid search (60% BM25 + 40% semantic)"
 	@echo "  - Optimized chunking (800 chars, 100 overlap)"
 	@echo "  - Interactive querying with similarity search"
+	@echo ""
+	@echo "Evaluation system:"
+	@echo "  Script location: $(EVAL_DIR)/eval.py"
+	@echo "  Test data: $(EVAL_DIR)/eval_data.py"
+	@echo "  Evaluation metrics: Precision@K, Recall@K, LLM-based answer quality"
+	@echo "  Test questions: 12 tea-related questions in Russian"
+	@echo "  Document corpus: 7 Chinese tea documents with ground truth"
+	@echo "  LLM assessment: Uses OpenRouter API for answer quality evaluation"

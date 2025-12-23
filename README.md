@@ -20,10 +20,13 @@ stepic_lc/
 │   │   ├── chain_on_messages.py  # Complex chain with message handling
 │   │   └── valid_json_out.py     # JSON output validation with Pydantic
 │   └── 3-rag/
-│       └── chunk_sizes/
-│           ├── chunker.py        # RAG chunking strategy evaluator
-│           ├── llm_assessor.py  # LLM-based chunk quality assessment
-│           └── evaluators.py    # Evaluation strategies
+│       ├── chunk_sizes/
+│       │   ├── chunker.py        # RAG chunking strategy evaluator
+│       │   ├── llm_assessor.py  # LLM-based chunk quality assessment
+│       │   └── evaluators.py    # Evaluation strategies
+│       └── eval_test/
+│           ├── eval.py          # Comprehensive RAG evaluation system
+│           └── eval_data.py     # Test data and ground truth for evaluation
 ├── pyproject.toml          # Project configuration and dependencies
 ├── Makefile               # Build and run commands
 └── README.md              # This file
@@ -129,6 +132,35 @@ uv run python src/3-rag/chunk_sizes/chunker.py --eval-mode llm-based --llm-model
 - Evaluates retrieval quality on 17 test questions about Indonesia
 - Provides winner statistics and sample outputs
 - LLM mode includes reasoning for each assessment
+
+### 4. RAG System Evaluation
+
+Comprehensive evaluation system for RAG systems with both retrieval metrics and answer quality assessment:
+
+```bash
+# Run complete evaluation (retrieval + LLM-based answer quality)
+make eval
+# or
+uv run python src/3-rag/eval_test/eval.py
+```
+
+**Evaluation Components:**
+- **Retrieval Metrics**: Precision@K and Recall@K calculation for document retrieval
+- **LLM-based Assessment**: Answer quality evaluation using ChatOpenAI
+- **Ground Truth Comparison**: Compares predicted answers against golden standard
+- **Russian Test Data**: Tea-related questions and documents for evaluation
+
+**Features:**
+- Tests retrieval performance on 12 tea-related questions
+- Uses 7 Chinese tea documents with ground truth mappings
+- LLM assessment evaluates answer correctness with detailed scoring
+- Bilingual evaluation (metrics in Russian, technical assessment in English)
+- Requires `OPENROUTER_API_KEY` for LLM-based answer quality assessment
+
+**Default Configuration:**
+- K=2 for precision/recall calculations
+- OpenRouter API with configurable model (default: x-ai/grok-4-fast)
+- HuggingFace embeddings (cointegrated/rubert-tiny2)
 
 ## Dependencies
 
