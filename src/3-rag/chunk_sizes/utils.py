@@ -5,8 +5,6 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-
-
 def load_data_from_url(url):
     loader = WebBaseLoader(
         web_paths=(url,),
@@ -21,8 +19,6 @@ def load_data_from_url(url):
     print(f"Загружено {len(docs)} документов")    
 
     return docs
-
-
 
 
 def make_splitter(cfg):
